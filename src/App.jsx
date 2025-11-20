@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Tractor, Search, MapPin, Calendar, User, ShieldCheck, Star, 
   PlusCircle, Home, Clock, CheckCircle, ChevronLeft, DollarSign, 
-  Settings, LogOut, Edit2, TrendingUp, List, XCircle, Check
+  Settings, LogOut, Edit2, TrendingUp, XCircle, Check
 } from 'lucide-react';
 
 // Firebase Imports
@@ -35,12 +35,13 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = '1:237464199962:web:82514e50fc849d5c8d02a3';
 
-// --- HELPER: Create Profile in DB ---
+// --- HELPER: Create/Fetch Profile in DB ---
 const ensureUserProfile = async (user) => {
   const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
   const userSnap = await getDoc(userRef);
+  
   if (!userSnap.exists()) {
-    await setDoc(userRef, {
+    const newProfile = {
       displayName: user.displayName,
       email: user.email,
       photoURL: user.photoURL,
@@ -48,13 +49,15 @@ const ensureUserProfile = async (user) => {
       phone: '',
       location: '',
       createdAt: serverTimestamp()
-    });
+    };
+    await setDoc(userRef, newProfile);
+    return newProfile;
   } else {
-    return userSnap.data(); // Return existing data to populate state
+    return userSnap.data();
   }
 };
 
-// --- COMPONENTS (Nav, Header, Cards) ---
+// --- COMPONENTS ---
 
 const BottomNav = ({ activeTab, setActiveTab }) => (
   <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-2 px-4 flex justify-between items-center z-50 shadow-lg pb-safe">
@@ -143,7 +146,7 @@ export default function TractorShareApp() {
   // Data States
   const [listings, setListings] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [myListings, setMyListings] = useState([]); // For Owners
+  const [myListings, setMyListings] = useState([]); 
   
   // UI States
   const [selectedItem, setSelectedItem] = useState(null);
@@ -156,10 +159,10 @@ export default function TractorShareApp() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        const userData = await ensureUserProfile(currentUser);
-        // Merge auth data with firestore data (role, phone, etc)
-        setUser({ ...currentUser, ...userData });
-        if (userData?.role) setRole(userData.role);
+        // Fetch profile from DB to get Role/Phone
+        const dbProfile = await ensureUserProfile(currentUser);
+        setUser({ ...currentUser, ...dbProfile });
+        if (dbProfile?.role) setRole(dbProfile.role);
       } else {
         setUser(null);
       }
@@ -168,49 +171,34 @@ export default function TractorShareApp() {
     return () => unsubscribe();
   }, []);
 
-  // 2. DATA FETCHING (Dynamic based on Role)
+  // 2. DATA FETCHING
   useEffect(() => {
     if (!user) return;
 
-    // A. Always fetch Public Listings for Search
+    // A. Public Listings (For Search)
     const listingsRef = collection(db, 'artifacts', appId, 'public', 'data', 'listings');
     const unsubListings = onSnapshot(query(listingsRef), (snap) => {
       setListings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
-    // B. Fetch Bookings (Different for Owner vs Renter)
-    let bookingsQuery;
-    const bookingsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'bookings'); // This path logic might need adjusting for production (usually bookings are a root collection), but sticking to your structure:
+    // B. Bookings (Split logic for Owner vs Renter)
+    // We use a shared collection so Owners can find requests
+    const bookingsRef = collection(db, 'artifacts', appId, 'bookings');
     
-    // Note: In your current structure, bookings are nested under users. 
-    // Ideally, for an Owner to see requests, bookings should be a top-level collection or the Owner needs to query across users (which requires an index).
-    // FOR SIMPLICITY in this update: I will assume we are using a top-level 'bookings' collection for easier shared access, 
-    // OR we just query the specific path we established.
-    // *Correction*: To keep your existing data working, we will assume the Renter sees their own subcollection.
-    // But for Owners to see requests, we need to store requests where owners can find them. 
-    // Let's stick to: Renter creates a booking in their own subcollection. 
-    // **Critical Fix**: For a real marketplace, we need a shared 'bookings' collection.
-    
-    // Let's implement a Root Level Bookings collection for this step to make Owner/Renter logic work properly.
-    const rootBookingsRef = collection(db, 'artifacts', appId, 'global_bookings');
-
     let q;
     if (role === 'owner') {
-        // Owner sees bookings where they are the owner
-        q = query(rootBookingsRef, where('ownerId', '==', user.uid));
+        // Owners see requests sent TO them
+        q = query(bookingsRef, where('ownerId', '==', user.uid));
     } else {
-        // Renter sees bookings where they are the requester
-        q = query(rootBookingsRef, where('requesterId', '==', user.uid));
+        // Renters see requests created BY them
+        q = query(bookingsRef, where('requesterId', '==', user.uid));
     }
 
     const unsubBookings = onSnapshot(q, (snap) => {
       setBookings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-        // If index is missing, this might fail initially. Console log it.
-        console.log("Booking query require index or empty", error);
     });
 
-    // C. If Owner, fetch *My Listings* to manage them
+    // C. My Listings (For Owners)
     if (role === 'owner') {
         const myListingsQuery = query(listingsRef, where('ownerId', '==', user.uid));
         const unsubMyListings = onSnapshot(myListingsQuery, (snap) => {
@@ -220,14 +208,14 @@ export default function TractorShareApp() {
     }
 
     return () => { unsubListings(); unsubBookings(); };
-  }, [user, role]); // Re-run when role switches
+  }, [user, role]);
 
-  // --- LOGIC ---
+  // --- HANDLERS ---
 
   const handleBooking = async (item, hours) => {
     if (!user) return;
     
-    // Save to GLOBAL bookings collection so both parties can see it
+    // Save to shared bookings collection
     const bookingData = {
         listingId: item.id,
         listingTitle: item.title,
@@ -239,15 +227,15 @@ export default function TractorShareApp() {
         date: new Date().toISOString(),
         ownerId: item.ownerId || 'system',
         requesterId: user.uid,
-        requesterName: user.displayName || 'Anonymous'
+        requesterName: user.displayName || 'Farmer'
     };
 
-    await addDoc(collection(db, 'artifacts', appId, 'global_bookings'), bookingData);
+    await addDoc(collection(db, 'artifacts', appId, 'bookings'), bookingData);
     alert("Request sent to Owner!");
   };
 
   const updateBookingStatus = async (bookingId, newStatus) => {
-      const bookingRef = doc(db, 'artifacts', appId, 'global_bookings', bookingId);
+      const bookingRef = doc(db, 'artifacts', appId, 'bookings', bookingId);
       await updateDoc(bookingRef, { status: newStatus });
   };
 
@@ -259,7 +247,7 @@ export default function TractorShareApp() {
           type: form.type.value,
           price: Number(form.price.value),
           location: form.location.value,
-          image: "https://images.unsplash.com/photo-1592875820939-c47839887c58?auto=format&fit=crop&q=80&w=800", // Placeholder for now
+          image: "https://images.unsplash.com/photo-1592875820939-c47839887c58?auto=format&fit=crop&q=80&w=800",
           rating: 5.0,
           verified: true,
           ownerName: user.displayName,
@@ -270,27 +258,33 @@ export default function TractorShareApp() {
       };
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'listings'), data);
       form.reset();
-      alert("Listing Live!");
+      alert("Listing Published!");
       setActiveTab('home');
   };
 
   const handleProfileUpdate = (updatedUser) => {
-      setUser(updatedUser);
+      // Update local state immediately
+      setUser({ ...user, ...updatedUser });
   };
 
   // --- VIEWS ---
 
-  // 1. HOME VIEW (Dynamic)
   const renderHome = () => {
     if (role === 'owner') {
-        // OWNER DASHBOARD
+        // --- OWNER DASHBOARD ---
+        const earnings = bookings
+            .filter(b => b.status === 'confirmed')
+            .reduce((acc, curr) => acc + curr.totalCost, 0);
+
         return (
             <div className="pb-24 p-4">
                 <div className="bg-gray-900 text-white rounded-2xl p-6 mb-6 shadow-xl">
                     <h2 className="text-lg font-medium text-gray-400">Total Earnings</h2>
-                    <div className="text-4xl font-bold mt-2">₹{bookings.filter(b => b.status === 'confirmed').reduce((acc, curr) => acc + curr.totalCost, 0)}</div>
+                    <div className="text-4xl font-bold mt-2">₹{earnings}</div>
                     <div className="flex gap-2 mt-4">
-                        <div className="bg-gray-800 px-3 py-1 rounded-lg text-xs text-green-400 flex items-center gap-1"><TrendingUp size={12}/> +12% this week</div>
+                        <div className="bg-gray-800 px-3 py-1 rounded-lg text-xs text-green-400 flex items-center gap-1">
+                            <TrendingUp size={12}/> +12% this week
+                        </div>
                     </div>
                 </div>
 
@@ -318,7 +312,7 @@ export default function TractorShareApp() {
         );
     }
 
-    // RENTER HOME (Standard Search)
+    // --- RENTER HOME ---
     return (
         <div className="pb-24">
           <div className="p-4">
@@ -342,7 +336,6 @@ export default function TractorShareApp() {
     );
   };
 
-  // 2. BOOKINGS VIEW (Dynamic)
   const renderBookings = () => (
       <div className="pb-24 p-4">
           <h2 className="text-xl font-bold text-gray-800 mb-6">
@@ -370,13 +363,13 @@ export default function TractorShareApp() {
                                       </span>
                                   </div>
                                   <div className="text-xs text-gray-500 mt-1">
-                                    {role === 'owner' ? `From: ${booking.requesterName}` : `Duration: ${booking.hours} hrs`}
+                                    {role === 'owner' ? `Requester: ${booking.requesterName}` : `Duration: ${booking.hours} hrs`}
                                   </div>
                                   <div className="font-bold text-emerald-600 mt-1">₹{booking.totalCost}</div>
                               </div>
                           </div>
                           
-                          {/* Owner Actions */}
+                          {/* OWNER ACTIONS */}
                           {role === 'owner' && booking.status === 'pending' && (
                               <div className="flex gap-2 mt-2 border-t pt-3">
                                   <button 
@@ -400,7 +393,6 @@ export default function TractorShareApp() {
       </div>
   );
 
-  // 3. PROFILE VIEW
   const renderProfile = () => (
       <div className="pb-24 p-4">
           <div className="flex items-center gap-4 mb-6">
@@ -456,7 +448,7 @@ export default function TractorShareApp() {
       <Header onOpenSettings={() => setIsSettingsOpen(true)} />
       <main className="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative">
         {activeTab === 'home' && renderHome()}
-        {/* Standard Search View reused */}
+        {/* Reusing standard search logic */}
         {activeTab === 'search' && (
             <div className="pb-24 p-4">
                 <h3 className="font-bold text-gray-800 text-lg mb-4">Search</h3>
@@ -474,7 +466,7 @@ export default function TractorShareApp() {
                 <form onSubmit={handleAddListing} className="space-y-4">
                     <div><label className="block text-xs font-bold mb-1">Title</label><input name="title" required className="w-full border p-3 rounded-lg" placeholder="e.g. Rotavator"/></div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-bold mb-1">Type</label><select name="type" className="w-full border p-3 rounded-lg"><option>Tractor</option><option>Drone</option></select></div>
+                        <div><label className="block text-xs font-bold mb-1">Type</label><select name="type" className="w-full border p-3 rounded-lg"><option>Tractor</option><option>Drone</option><option>Harvester</option></select></div>
                         <div><label className="block text-xs font-bold mb-1">Price/Hr</label><input name="price" type="number" required className="w-full border p-3 rounded-lg"/></div>
                     </div>
                     <div><label className="block text-xs font-bold mb-1">Location</label><input name="location" required className="w-full border p-3 rounded-lg"/></div>
@@ -489,9 +481,36 @@ export default function TractorShareApp() {
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       
       {/* Modals */}
-      {selectedItem && <div className="fixed inset-0 z-50 bg-white p-4"><button onClick={() => setSelectedItem(null)}>Close</button><ListingCard item={selectedItem} onClick={()=>{}} /><button onClick={() => handleBooking(selectedItem, 5)} className="w-full bg-emerald-600 text-white p-4 mt-4 rounded-xl">Book for 5 Hours</button></div>}
-      {isEditProfileOpen && <EditProfileModal user={user} db={db} appId={appId} onClose={() => setIsEditProfileOpen(false)} onUpdate={handleProfileUpdate} />}
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 bg-white p-4 animate-in slide-in-from-bottom-10">
+             <button onClick={() => setSelectedItem(null)} className="absolute top-4 left-4 p-2 bg-gray-100 rounded-full"><ChevronLeft/></button>
+             <div className="mt-12">
+                <ListingCard item={selectedItem} onClick={()=>{}} />
+                <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+                    <h3 className="font-bold mb-2">Description</h3>
+                    <p className="text-sm text-gray-600">{selectedItem.description}</p>
+                </div>
+                <button onClick={() => { handleBooking(selectedItem, 5); setSelectedItem(null); }} className="w-full bg-emerald-600 text-white p-4 mt-6 rounded-xl font-bold shadow-lg">
+                    Request for 5 Hours
+                </button>
+             </div>
+        </div>
+      )}
+
+      {isEditProfileOpen && (
+        <EditProfileModal 
+            user={user} 
+            db={db} 
+            appId={appId} 
+            onClose={() => setIsEditProfileOpen(false)} 
+            onUpdate={handleProfileUpdate} 
+        />
+      )}
+      
+      {isSettingsOpen && (
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+      )}
+
       <GeminiAssistant />
     </div>
   );
