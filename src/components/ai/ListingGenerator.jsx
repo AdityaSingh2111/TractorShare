@@ -1,0 +1,1 @@
+import { generateListingDescription } from '../../services/gemini';
