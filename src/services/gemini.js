@@ -11,34 +11,6 @@ const model = genAI.getGenerativeModel({
 });
 
 /**
- * Generates a helpful description for farm equipment.
- * Used by: ListingGenerator.jsx
- */
-export const generateListingDescription = async (details) => {
-  const prompt = `
-    You are a marketing expert for "TractorShare", a farm equipment rental app.
-    Write a short, attractive, and trustworthy description (max 3 sentences) for this equipment:
-    - Type: ${details.type}
-    - Model: ${details.model}
-    - Power/Capacity: ${details.specs}
-    - Location: ${details.location}
-
-    Highlight its reliability and suitability for local farming. 
-    Do not use hashtags. Use a professional but friendly tone.
-  `;
-
-  try {
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-    return result.response.text();
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    throw new Error("Could not generate description. Please try again.");
-  }
-};
-
-/**
  * Chat with the AI Farm Assistant.
  * Used by: GeminiAssistant.jsx
  */

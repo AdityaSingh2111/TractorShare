@@ -684,6 +684,19 @@ export default function TractorShareApp() {
             onBook={handleBooking}
           />
       )}
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      {selectedItem && (
+          <ProductDetails 
+            item={selectedItem} 
+            user={user}
+            onClose={() => setSelectedItem(null)} 
+            onBook={handleBooking}
+          />
+      )}
+
+      {/* ✨ Add the Chatbot here */}
+      <GeminiAssistant />
     </div>
   );
 }
