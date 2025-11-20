@@ -339,7 +339,27 @@ export default function TractorShareApp() {
   const [role, setRole] = useState('renter'); // 'renter' or 'owner'
 
   // Auth & Data Init
-  // Find this useEffect inside App.jsx and replace it completely
+ // --- 0. AUTH INITIALIZATION (Restore this!) ---
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // This logs the user in anonymously so they can write to the database
+        await signInAnonymously(auth);
+      } catch (error) {
+        console.error("Login failed:", error);
+        alert("Login failed. Check internet connection.");
+      }
+    };
+    
+    initAuth();
+
+    // Listen for the login to complete
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    
+    return () => unsubscribe();
+  }, []);
 useEffect(() => {
   // 1. If Auth is still initializing, wait. 
   // But if we have no user and auth is done, stop loading.
