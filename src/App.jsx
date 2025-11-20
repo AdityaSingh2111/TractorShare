@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import GeminiAssistant from './components/ai/GeminiAssistant';
+import GeminiAssistant from './components/ai/GeminiAssistant.jsx';
 import { 
   Tractor, 
   Search, 
