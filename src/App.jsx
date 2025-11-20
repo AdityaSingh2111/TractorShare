@@ -339,49 +339,47 @@ export default function TractorShareApp() {
   const [role, setRole] = useState('renter'); // 'renter' or 'owner'
 
   // Auth & Data Init
-  useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
+  // Find this useEffect inside App.jsx and replace it completely
+useEffect(() => {
+  // 1. If Auth is still initializing, wait. 
+  // But if we have no user and auth is done, stop loading.
+  if (!user) {
+     // Optional: Set a timeout to kill loading if auth takes too long
+     const timer = setTimeout(() => setLoading(false), 3000); 
+     return () => clearTimeout(timer);
+  }
+  
+  const listingsRef = collection(db, 'artifacts', appId, 'public', 'data', 'listings');
+  
+  // 2. Fetch Listings with Error Handling
+  const unsubListings = onSnapshot(query(listingsRef), 
+    (snapshot) => {
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setListings(items);
+      setLoading(false); // <--- Success! Stop loading
+    },
+    (err) => {
+      console.error("Listings Error:", err);
+      setLoading(false); // <--- ERROR! Stop loading so user can see "Retry" or empty state
+      alert("Connection Error: " + err.message);
+    }
+  );
 
-  // Fetch Listings
-  useEffect(() => {
-    if (!user) return;
-    
-    const listingsRef = collection(db, 'artifacts', appId, 'public', 'data', 'listings');
-    // Fetch ALL listings (no complex queries)
-    const unsubListings = onSnapshot(query(listingsRef), 
-      (snapshot) => {
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setListings(items);
-        setLoading(false);
-      },
-      (err) => console.error("Listings Error:", err)
-    );
+  // 3. Fetch User Bookings
+  const bookingsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'bookings');
+  const unsubBookings = onSnapshot(query(bookingsRef),
+    (snapshot) => {
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBookings(items);
+    },
+    (err) => console.error("Bookings Error:", err)
+  );
 
-    // Fetch User Bookings (Private)
-    const bookingsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'bookings');
-    const unsubBookings = onSnapshot(query(bookingsRef),
-      (snapshot) => {
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setBookings(items);
-      },
-      (err) => console.error("Bookings Error:", err)
-    );
-
-    return () => {
-        unsubListings();
-        unsubBookings();
-    };
-  }, [user]);
+  return () => {
+      unsubListings();
+      unsubBookings();
+  };
+}, [user]);
 
   // --- Logic Handlers ---
 
