@@ -403,19 +403,29 @@ useEffect(() => {
 
   // --- Logic Handlers ---
 
-  const handleSeedData = async () => {
-    if (!user) return;
+   const handleSeedData = async () => {
+    // ADDED: Debugging alert
+    if (!user) {
+        alert("Wait! You are not logged in yet. Check your internet connection.");
+        return;
+    }
+    
     const listingsRef = collection(db, 'artifacts', appId, 'public', 'data', 'listings');
     
-    // Just add them one by one
-    for (const item of SEED_DATA) {
-       await addDoc(listingsRef, {
-           ...item,
-           ownerId: user.uid,
-           createdAt: serverTimestamp()
-       });
+    try {
+        for (const item of SEED_DATA) {
+           await addDoc(listingsRef, {
+               ...item,
+               ownerId: user.uid,
+               createdAt: serverTimestamp()
+           });
+        }
+        alert("Success! Marketplace seeded with demo tractors.");
+        // Force refresh the tab to show data immediately
+        setActiveTab('home'); 
+    } catch (err) {
+        alert("Error seeding data: " + err.message);
     }
-    alert("Marketplace seeded with demo tractors!");
   };
 
   const handleBooking = async (item, hours) => {
@@ -438,7 +448,7 @@ useEffect(() => {
       alert("Booking request sent to owner!");
   };
 
-  const handleAddListing = async (e) => {
+  const handleAdconstdListing = async (e) => {
       e.preventDefault();
       const form = e.target;
       const data = {
