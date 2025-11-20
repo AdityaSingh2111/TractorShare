@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import GeminiAssistant from './components/ai/GeminiAssistant';
 import { 
   Tractor, 
   Search, 
@@ -685,19 +684,6 @@ export default function TractorShareApp() {
             onBook={handleBooking}
           />
       )}
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      {selectedItem && (
-          <ProductDetails 
-            item={selectedItem} 
-            user={user}
-            onClose={() => setSelectedItem(null)} 
-            onBook={handleBooking}
-          />
-      )}
-
-      {/* ✨ Add the Chatbot here */}
-      <GeminiAssistant />
     </div>
   );
 }

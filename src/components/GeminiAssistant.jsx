@@ -1,1 +1,0 @@
-import { chatWithFarmAssistant } from '../../services/gemini';
