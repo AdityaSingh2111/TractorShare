@@ -1,3 +1,4 @@
+import GeminiAssistant from './components/ai/GeminiAssistant';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Tractor, 
@@ -684,6 +685,7 @@ export default function TractorShareApp() {
             onBook={handleBooking}
           />
       )}
+      {<GeminiAssistant />}
     </div>
   );
 }
