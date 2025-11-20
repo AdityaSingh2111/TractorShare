@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot, Sparkles } from 'lucide-react';
+import { X, Send, Bot } from 'lucide-react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const SYSTEM_PROMPT = `
@@ -11,6 +11,9 @@ Your goal is to help farmers:
 Keep answers concise, friendly, and use emojis.
 `;
 
+// --- PASTE YOUR NEW AI STUDIO KEY HERE ---
+const FALLBACK_API_KEY = "AIzaSyCKA1ex10R_o0lm2dQBA778mcObBBIjlNs"; 
+
 export default function GeminiAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -20,7 +23,6 @@ export default function GeminiAssistant() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -29,26 +31,23 @@ export default function GeminiAssistant() {
     e.preventDefault();
     if (!input.trim()) return;
 
-    // 1. Add User Message
     const userText = input;
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setInput('');
     setLoading(true);
 
     try {
-      // 2. Initialize Gemini API
-      // NOTE: On Vercel, set VITE_GEMINI_API_KEY in your project settings.
-      // In this preview environment, it falls back to the internal key.
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || FALLBACK_API_KEY; 
       
-      if (!apiKey && location.hostname !== 'localhost') {
-        throw new Error("API Key missing. Please set VITE_GEMINI_API_KEY in Vercel.");
+      if (!apiKey || apiKey.includes("YOUR_NEW")) {
+        throw new Error("Invalid API Key");
       }
 
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-09-2025" });
+      
+      // --- FIX IS HERE: CHANGED 1.5 TO 2.5 ---
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-      // 3. Construct Chat History
       const history = [
         { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
         { role: "model", parts: [{ text: "Understood. I am ready to help farmers." }] },
@@ -58,7 +57,6 @@ export default function GeminiAssistant() {
         }))
       ];
 
-      // 4. Get Response
       const chat = model.startChat({ history });
       const result = await chat.sendMessage(userText);
       const responseText = result.response.text();
@@ -66,7 +64,7 @@ export default function GeminiAssistant() {
       setMessages(prev => [...prev, { role: 'model', text: responseText }]);
     } catch (error) {
       console.error("Chat Error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "I'm having trouble connecting to the internet right now. Please try again later." }]);
+      setMessages(prev => [...prev, { role: 'model', text: `Error: ${error.message}. Try updating the app.` }]);
     } finally {
       setLoading(false);
     }
@@ -74,10 +72,9 @@ export default function GeminiAssistant() {
 
   return (
     <>
-      {/* Floating Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-20 right-4 z-50 p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 ${
+        className={`fixed bottom-24 right-4 z-[60] p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 ${
           isOpen ? 'scale-0 opacity-0' : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white scale-100 opacity-100'
         }`}
       >
@@ -87,11 +84,8 @@ export default function GeminiAssistant() {
         </div>
       </button>
 
-      {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-20 right-4 z-50 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 origin-bottom-right">
-          
-          {/* Header */}
+        <div className="fixed bottom-24 right-4 z-[60] w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 origin-bottom-right">
           <div className="bg-gradient-to-r from-emerald-700 to-teal-700 p-4 flex justify-between items-center text-white shadow-md">
             <div className="flex items-center gap-3">
               <div className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm">
@@ -109,8 +103,7 @@ export default function GeminiAssistant() {
             </button>
           </div>
 
-          {/* Messages Area */}
-          <div className="h-80 overflow-y-auto p-4 bg-gray-50 space-y-4 scrollbar-thin scrollbar-thumb-gray-300">
+          <div className="h-80 overflow-y-auto p-4 bg-gray-50 space-y-4 scrollbar-hide">
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div 
@@ -138,8 +131,7 @@ export default function GeminiAssistant() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
-          <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex gap-2">
+          <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex gap-2 pb-safe">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -149,7 +141,7 @@ export default function GeminiAssistant() {
             <button 
               type="submit" 
               disabled={loading || !input.trim()}
-              className="bg-emerald-600 text-white p-2.5 rounded-full hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all hover:shadow-md"
+              className="bg-emerald-600 text-white p-2.5 rounded-full hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
             >
               <Send size={18} />
             </button>
