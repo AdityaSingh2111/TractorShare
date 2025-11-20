@@ -604,7 +604,7 @@ export default function TractorShareApp() {
                  {user ? "JD" : "?"}
               </div>
               <div>
-                  <h2 className="text-xl font-bold text-gray-900">Jai Dhartiputra</h2>
+                  <h2 className="text-xl font-bold text-gray-900">Aditya Singh</h2>
                   <p className="text-gray-500 text-sm">+91 98765 43210</p>
               </div>
           </div>
